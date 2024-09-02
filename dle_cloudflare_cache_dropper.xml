@@ -1,0 +1,228 @@
+<?xml version="1.0" encoding="utf-8"?>
+<dleplugin>
+	<name>Очистка кеша в Cloudflare</name>
+	<description>Добавлено: кеш сбрасывается при редактировании или добавлении новости, чтобы избежать бага 404 страницы, при наличии HTML кеширования. Если не нужно, то действия в functions и functions.inc отключить</description>
+	<icon></icon>
+	<version>1.1</version>
+	<dleversion>13.0</dleversion>
+	<versioncompare>greater</versioncompare>
+	<upgradeurl></upgradeurl>
+	<filedelete>0</filedelete>
+	<needplugin></needplugin>
+	<mnotice>0</mnotice>
+	<mysqlinstall><![CDATA[]]></mysqlinstall>
+	<mysqlupgrade><![CDATA[]]></mysqlupgrade>
+	<mysqlenable><![CDATA[]]></mysqlenable>
+	<mysqldisable><![CDATA[]]></mysqldisable>
+	<mysqldelete><![CDATA[]]></mysqldelete>
+	<phpinstall><![CDATA[]]></phpinstall>
+	<phpupgrade><![CDATA[]]></phpupgrade>
+	<phpenable><![CDATA[]]></phpenable>
+	<phpdisable><![CDATA[]]></phpdisable>
+		<other_templates><![CDATA[]]></other_templates>
+	<other_js><![CDATA[]]></other_js>
+	<other_htaccses><![CDATA[]]></other_htaccses>
+	<phpdelete><![CDATA[]]></phpdelete>
+
+	<notice><![CDATA[]]></notice>
+	<file name="engine/inc/main.php">
+		<operation action="replace">
+			<searchcode><![CDATA[echo "<button id=\"check_updates\" name=\"check_updates\" class=\"btn bg-slate-600 btn-sm btn-raised\"><i class=\"fa fa-exclamation-circle\"></i> {$lang['dle_udate']}</button>&nbsp;<button id=\"clearbutton\" name=\"clearbutton\" class=\"btn bg-danger-600 btn-sm btn-raised\"><i class=\"fa fa-trash\"></i> {$lang['btn_clearcache']}</button>";]]></searchcode>
+			<replacecode><![CDATA[echo "<button id=\"check_updates\" name=\"check_updates\" class=\"btn bg-slate-600 btn-sm btn-raised\"><i class=\"fa fa-exclamation-circle\"></i> {$lang['dle_udate']}</button>&nbsp;<button id=\"clearbutton\" name=\"clearbutton\" class=\"btn bg-danger-600 btn-sm btn-raised\"><i class=\"fa fa-trash\"></i> {$lang['btn_clearcache']}</button>&nbsp;<button id=\"clearcloudflare\" name=\"clearcloudflare\" class=\"btn bg-warning-600 btn-sm btn-raised\"><i class=\"fa fa-trash\"></i> Очистить кеш Cloudflare</button>";]]></replacecode>
+			<enabled>1</enabled>
+		</operation>
+		<operation action="before">
+			<searchcode><![CDATA[$('#send_notice').click(function() {]]></searchcode>
+			<replacecode><![CDATA[$('#clearcloudflare').click(function() {
+
+			    DLEconfirm( '{$lang['confirm_action']}', '{$lang['p_confirm']}', function () {
+
+					$.get("engine/ajax/controller.php?mod=clearcloudflare&action=clear&user_hash={$dle_login_hash}", function( data ){
+                        data = jQuery.parseJSON(data);
+						Growl.info({
+							title: data.head,
+							text: data.text
+						});
+					});
+				} );
+				return false;
+			});]]></replacecode>
+			<enabled>1</enabled>
+		</operation>
+	</file>
+	<file name="engine/ajax/clearcloudflare.php">
+		<operation action="create">
+			<replacecode><![CDATA[<?php
+  
+if(!defined('DATALIFEENGINE')) {
+	die( "Hacking attempt!" );
+}
+
+if(($member_id['user_group'] != 1)) {die ("error");}
+
+if ($_REQUEST['user_hash'] == "" OR $_REQUEST['user_hash'] != $dle_login_hash) {
+
+	  die ("error");
+
+}
+
+if( $_REQUEST['action'] == "clear" ) {
+	
+    $your_email = 'ващ@емейл.ru';
+    $your_xauth = 'f2cca28985f82awdkjawdhj129213dc07'; // global api key
+    $your_domain = 'ваш_сайт.домен';
+  
+  	if ( $curl = curl_init())
+	{
+		$headers = array(
+        'X-Auth-Key: '.$your_xauth,
+        'X-Auth-Email: '.$your_email,
+		'Content-Type: application/json',
+		);
+		curl_setopt($curl, CURLOPT_URL, "https://api.cloudflare.com/client/v4/zones?status=active&page=1&per_page=5&order=status&direction=desc&match=all");
+		curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
+		curl_setopt($curl, CURLOPT_HTTPHEADER, $headers);
+		$out = curl_exec($curl);
+		$domain_list = json_decode($out, true);
+		curl_close($curl);
+	}
+  
+  	foreach ( $domain_list['result'] as $domain ) {
+      	if ( $domain['name'] == $your_domain ) $your_id = $domain['id'];
+    }
+  
+    if ( $curl = curl_init())
+	{
+		$headers = array(
+        'X-Auth-Key: '.$your_xauth,
+        'X-Auth-Email: '.$your_email,
+		'Content-Type: application/json',
+		);
+        $data = json_encode(array("purge_everything" => true));
+		curl_setopt($curl, CURLOPT_URL, "https://api.cloudflare.com/client/v4/zones/".$your_id."/purge_cache");
+		curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($curl, CURLOPT_POSTFIELDS, $data);
+		curl_setopt($curl, CURLOPT_HTTPHEADER, $headers);
+		$out = curl_exec($curl);
+		$purge = json_decode($out, true);
+		curl_close($curl);
+	}
+
+    if( $purge['success'] == 1 ) echo json_encode(['head' => 'Кеш в Cloudflare очищен!', 'text' => 'Код успешно отработан. Кеш вашего сайта в Cloudflare очищен']);
+    else echo json_encode(['head' => 'Ошибка!', 'text' => 'Что-то пошло не так. Возможно не верный email или api key']);
+}
+else die ("error");
+
+?>]]></replacecode>
+			<enabled>1</enabled>
+		</operation>
+	</file>
+	<file name="engine/modules/functions.php">
+		<operation action="before">
+			<searchcode><![CDATA[	if( $config['cache_type'] ) {
+		if( $dlefastcache->connection > 0 ) {
+			$dlefastcache->clear( $cache_areas );]]></searchcode>
+			<replacecode><![CDATA[    clearCloudflareCache();]]></replacecode>
+			<enabled>1</enabled>
+		</operation>
+		<operation action="before">
+			<searchcode><![CDATA[function clear_cache($cache_areas = false) {]]></searchcode>
+			<replacecode><![CDATA[function clearCloudflareCache () {
+    $your_email = 'ващ@емейл.ru';
+    $your_xauth = 'f2cca28985f82awdkjawdhj129213dc07'; // global api key
+    $your_domain = 'ваш_сайт.домен';
+
+    if ( $curl = curl_init())
+    {
+        $headers = array(
+            'X-Auth-Key: '.$your_xauth,
+            'X-Auth-Email: '.$your_email,
+            'Content-Type: application/json',
+        );
+        curl_setopt($curl, CURLOPT_URL, "https://api.cloudflare.com/client/v4/zones?status=active&page=1&per_page=5&order=status&direction=desc&match=all");
+        curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($curl, CURLOPT_HTTPHEADER, $headers);
+        $out = curl_exec($curl);
+        $domain_list = json_decode($out, true);
+        curl_close($curl);
+    }
+
+    foreach ( $domain_list['result'] as $domain ) {
+        if ( $domain['name'] == $your_domain ) $your_id = $domain['id'];
+    }
+
+    if ( $curl = curl_init())
+    {
+        $headers = array(
+            'X-Auth-Key: '.$your_xauth,
+            'X-Auth-Email: '.$your_email,
+            'Content-Type: application/json',
+        );
+        $data = json_encode(array("purge_everything" => true));
+        curl_setopt($curl, CURLOPT_URL, "https://api.cloudflare.com/client/v4/zones/".$your_id."/purge_cache");
+        curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($curl, CURLOPT_POSTFIELDS, $data);
+        curl_setopt($curl, CURLOPT_HTTPHEADER, $headers);
+        $out = curl_exec($curl);
+        $purge = json_decode($out, true);
+        curl_close($curl);
+    }
+}]]></replacecode>
+			<enabled>1</enabled>
+		</operation>
+	</file>
+	<file name="engine/inc/include/functions.inc.php">
+		<operation action="before">
+			<searchcode><![CDATA[	if( $config['cache_type'] ) {
+		if( $dlefastcache->connection > 0 ) {
+			$dlefastcache->clear( $cache_areas );]]></searchcode>
+			<replacecode><![CDATA[    clearCloudflareCache();]]></replacecode>
+			<enabled>1</enabled>
+		</operation>
+		<operation action="before">
+			<searchcode><![CDATA[function clear_cache($cache_areas = false) {]]></searchcode>
+			<replacecode><![CDATA[function clearCloudflareCache () {
+    $your_email = 'ващ@емейл.ru';
+    $your_xauth = 'f2cca28985f82awdkjawdhj129213dc07'; // global api key
+    $your_domain = 'ваш_сайт.домен';
+
+    if ( $curl = curl_init())
+    {
+        $headers = array(
+            'X-Auth-Key: '.$your_xauth,
+            'X-Auth-Email: '.$your_email,
+            'Content-Type: application/json',
+        );
+        curl_setopt($curl, CURLOPT_URL, "https://api.cloudflare.com/client/v4/zones?status=active&page=1&per_page=5&order=status&direction=desc&match=all");
+        curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($curl, CURLOPT_HTTPHEADER, $headers);
+        $out = curl_exec($curl);
+        $domain_list = json_decode($out, true);
+        curl_close($curl);
+    }
+
+    foreach ( $domain_list['result'] as $domain ) {
+        if ( $domain['name'] == $your_domain ) $your_id = $domain['id'];
+    }
+
+    if ( $curl = curl_init())
+    {
+        $headers = array(
+            'X-Auth-Key: '.$your_xauth,
+            'X-Auth-Email: '.$your_email,
+            'Content-Type: application/json',
+        );
+        $data = json_encode(array("purge_everything" => true));
+        curl_setopt($curl, CURLOPT_URL, "https://api.cloudflare.com/client/v4/zones/".$your_id."/purge_cache");
+        curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($curl, CURLOPT_POSTFIELDS, $data);
+        curl_setopt($curl, CURLOPT_HTTPHEADER, $headers);
+        $out = curl_exec($curl);
+        $purge = json_decode($out, true);
+        curl_close($curl);
+    }
+}]]></replacecode>
+			<enabled>1</enabled>
+		</operation>
+	</file>
+</dleplugin>
